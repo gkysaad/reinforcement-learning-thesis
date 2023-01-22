@@ -1,0 +1,116 @@
+from stable_baselines3_thesis.common.callbacks import EvalCallback, StopTrainingOnRewardThreshold
+from stable_baselines3_thesis.common.env_util import make_vec_env
+from stable_baselines3_thesis import A2C, DQN, DDPG, PPO, TD3
+import argparse
+import pickle
+import gym
+import torch
+import random
+import numpy as np
+
+from common import *
+
+# =================
+# === ARGUMENTS ===
+# =================
+
+parser = argparse.ArgumentParser(description='DRL trainig w/ Stable Baselines3')
+
+# ==> DRL Parameters
+parser.add_argument('--model', required=True, choices=models.keys())
+parser.add_argument('--policy', required=True, choices=policies)
+parser.add_argument('--lr', default=1e-4, type=float)
+parser.add_argument('--lr_schedule', default="linear", type=str)
+parser.add_argument('--num_neurons_per_layer', default=64, type=int)
+parser.add_argument('--num_layers', default=2, type=int)
+parser.add_argument('--activation_fn', default="tanh", type=str)
+
+# ==> Env Parameters
+parser.add_argument('--env', default='CartPole-v0')
+parser.add_argument('--steps', default=100000, type=int)
+parser.add_argument('--n_env', default=10, type=int)
+parser.add_argument('--disable_reward_threshold', default=0, type=int)
+parser.add_argument('--reward_threshold', default=195, type=int)
+parser.add_argument('--reward_threshold_episodes', default=100, type=int)
+parser.add_argument('--eval_freq', default=100, type=int) # eval_freq --> eval_freq * n_env
+
+# ==> DRL Framework Specific Parameters
+parser.add_argument('--n_steps', default=5, type=int, help="number of updates before applying gradient (A2C, PPO)")
+parser.add_argument('--ent_coef', default=0.02, type=float)
+# parser.add_argument('--epsilon_initial', default=1.0, type=float)
+# parser.add_argument('--epsilon_final', default=0.1, type=float)
+# parser.add_argument('--target_update_interval', default=10000, type=int)
+# parser.add_argument('--buffer_size', default=50000, type=int)
+
+# ==> Logging Parameters
+parser.add_argument('--project', '-pj', default="test")
+parser.add_argument('--repeat', '-r', default=100, type=int)
+
+# ==> Other Parameters
+parser.add_argument('--model_path', default=None, help='model to load')
+parser.add_argument('--weights_path', default=None, help='weights to load (pkl dictionary)')
+parser.add_argument('--seed', default=-1, type=int, help='random seed (-1=Random Seed)')
+
+
+# =========================
+# === SUPPORT FUNCTIONS ===
+# =========================
+
+def make_env(args):
+    if args.model == "A2C" or args.model == "PPO":
+        env = make_vec_env(args.env, n_envs=args.n_env)
+    else: # Cannot have multiple environments
+        env = gym.make(args.env)
+    return env
+
+def make_model(args, env, i):
+    tfboard_log_folder = "./results/drl/"+args.env+"/"+args.project+"/"
+    
+    # Load only weights
+    if args.weights_path != None:
+        with open(args.weights_path, 'rb') as handle:
+            drl_new_params = pickle.load(handle)
+        model = get_model(args, env, tfboard_log_folder, i)
+        model.set_parameters(drl_new_params, exact_match=False)
+
+    # Load whole model
+    elif args.model_path != None:
+        if args.model in models:
+            model = models.load(args.model_path, env)
+        else:
+            raise NotImplementedError
+    
+    # Create new model
+    else:
+        model = get_model(args, env, tfboard_log_folder, i)
+    return model, tfboard_log_folder
+
+# =====================
+# === MAIN FUNCTION ===
+# =====================
+
+def drl(args, i):
+    env = make_env(args)
+    if args.disable_reward_threshold == 0:
+        callback_on_best = StopTrainingOnRewardThreshold(reward_threshold=args.reward_threshold)
+        eval_callback = EvalCallback(env, callback_on_new_best=callback_on_best, eval_freq=args.eval_freq, n_eval_episodes=args.reward_threshold_episodes)
+        model, tf_log = make_model(args, env, i)
+        model.learn(total_timesteps=args.steps, eval_freq=1, n_eval_episodes=1, log_interval=1, callback=eval_callback)
+        model.save(tf_log + args.model + "_" + str(i+1) + "/model")
+    else:
+        model = make_model(args, env)
+        model.learn(total_timesteps=args.steps, eval_freq=1, n_eval_episodes=1, log_interval=1)
+        model.save(tf_log + "model" + str(i+1))
+
+def main(args):
+    # TO DO: Parallelize environments
+    for i in range(args.repeat):
+        torch.manual_seed(args.seed + i)
+        np.random.seed(args.seed + i)
+        random.seed(args.seed + i)
+        drl(args, i)
+
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+    main(args)

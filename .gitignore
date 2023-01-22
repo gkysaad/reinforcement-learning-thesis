@@ -357,3 +357,4 @@ src/old-tanh/
 src/models/*
 src/test.py
 src/data/*
+src/stable_baselines3_old/
