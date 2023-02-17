@@ -237,6 +237,8 @@ def neuron_entropy_with_grad(args, run_activations, run_entropy, rew_step,\
             if len(topk_idxs) != 0:
                 for grad_mag, idx in zip(grad_mags, topk_idxs): # idx = neurons
                     if weight_grad == 0:
+                        print(activation[idx, :].detach().numpy().squeeze())
+                        print(activation[idx, :].detach().numpy().squeeze().shape)
                         hist_activations = np.histogram(activation[idx, :].detach().numpy().squeeze(), bins=7)
                         hist_counts = hist_activations[0]
                         hist_freqs = hist_counts / np.sum(hist_counts)
@@ -279,10 +281,16 @@ def main(args):
     # gets the # of steps at which the reward threshold is reached for each run
     rew_step = load_sheets(args, args.dir, xlsx_name)
 
+    print(activations[0].shape)
+    print(actions[0].shape)
+
     first_models = [m[1] for m in models]
     first_feats = [f[50:args.n_eval+50, :] for f in feats]
     first_actions = [a[50:args.n_eval+50, :] for a in actions]
     first_activations = [a[50:args.n_eval+50, :] for a in activations]
+
+    print(first_activations[0].shape)
+    print(first_actions[0].shape)
 
     if args.task == "neuron_entropy":
         ne_boosts = []
@@ -323,7 +331,7 @@ def main(args):
         plt.cla()
         plt.clf()
 
-        pc_boosts = se_boosts/se_boosts[0, 0]
+        pc_boosts = se_boosts/se_boosts[-1, -1]
         nan_pc_boosts = pc_boosts.copy()
         nan_pc_boosts[nan_pc_boosts == 0] = np.nan
         print("AVG BOOST:", np.nanmean(nan_pc_boosts))

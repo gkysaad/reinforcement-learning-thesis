@@ -1,3 +1,4 @@
+import os
 from stable_baselines3_thesis.common.callbacks import EvalCallback, StopTrainingOnRewardThreshold
 from stable_baselines3_thesis.common.env_util import make_vec_env
 from stable_baselines3_thesis import A2C, DQN, DDPG, PPO, TD3
@@ -89,13 +90,45 @@ def make_model(args, env, i):
 # === MAIN FUNCTION ===
 # =====================
 
+def get_entropy(activations):
+    hist_activations = np.histogram(activations.numpy().squeeze(), bins=7)
+    hist_counts = hist_activations[0]
+    hist_freqs = hist_counts / np.sum(hist_counts)
+    run_ent_val = -np.sum(hist_freqs * np.log(hist_freqs, out=np.zeros_like(hist_freqs), where=(hist_freqs!=0)))
+    return run_ent_val
+
 def drl(args, i):
     env = make_env(args)
     if args.disable_reward_threshold == 0:
         callback_on_best = StopTrainingOnRewardThreshold(reward_threshold=args.reward_threshold)
         eval_callback = EvalCallback(env, callback_on_new_best=callback_on_best, eval_freq=args.eval_freq, n_eval_episodes=args.reward_threshold_episodes)
         model, tf_log = make_model(args, env, i)
+
+        # ADDED CODE
+        # Save activations
+        act_folder = ".activations/"
+        if not os.path.isdir(act_folder):
+            os.makedirs(act_folder)
+        # create file in act_folder for i-th run
+        acts_csv = open(act_folder + args.model + "_" + str(i+1) + ".csv", "w")
+
+        def get_activation(name):
+            def hook(model, input, output):
+                ent_val = get_entropy(output.detach())
+                if name == 1:
+                    acts_csv.write(str(ent_val) + ",")
+                elif name == 3:
+                    acts_csv.write(str(ent_val) + "\n")                
+            return hook
+        model.policy.mlp_extractor.policy_net[1].register_forward_hook(get_activation(1))
+        model.policy.mlp_extractor.policy_net[3].register_forward_hook(get_activation(3))
+        # END ADDED CODE
+
+
         model.learn(total_timesteps=args.steps, eval_freq=1, n_eval_episodes=1, log_interval=1, callback=eval_callback)
+
+        acts_csv.close()
+
         model.save(tf_log + args.model + "_" + str(i+1) + "/model")
     else:
         model = make_model(args, env)

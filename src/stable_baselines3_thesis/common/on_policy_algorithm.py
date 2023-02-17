@@ -251,6 +251,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             continue_training = self.collect_rollouts(self.env, callback, self.rollout_buffer, n_rollout_steps=self.n_steps)
 
             if continue_training is False:
+                # print("STEPS END: ", self.num_timesteps)
                 break
 
             iteration += 1
@@ -270,6 +271,9 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 self.logger.dump(step=self.num_timesteps)
 
             self.train()
+
+            # # get activation of tanh activation layers
+            # print(self.policy.mlp_extractor.policy_net[1].values)
 
         callback.on_training_end()
 

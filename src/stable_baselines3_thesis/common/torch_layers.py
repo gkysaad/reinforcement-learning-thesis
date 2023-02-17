@@ -115,7 +115,7 @@ def create_mlp(
         activation function
     :return:
     """
-
+    print("act fcn: ", activation_fn)
     if len(net_arch) > 0:
         modules = [nn.Linear(input_dim, net_arch[0]), activation_fn()]
     else:

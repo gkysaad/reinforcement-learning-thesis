@@ -694,7 +694,6 @@ class ActorCriticPolicy(BasePolicy):
         latent_vf = self.mlp_extractor.forward_critic(features)
         return self.value_net(latent_vf)
 
-
 class ActorCriticCnnPolicy(ActorCriticPolicy):
     """
     CNN policy class for actor-critic algorithms (has both policy and value prediction).

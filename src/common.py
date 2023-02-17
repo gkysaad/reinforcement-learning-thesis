@@ -34,6 +34,15 @@ def get_model(args, env, tfboard_log_folder, i):
                              activation_fn=act_fn)
 
         model = A2C(args.policy, env, learning_rate=lr, n_steps=args.n_steps, ent_coef=args.ent_coef, policy_kwargs=policy_kwargs, tensorboard_log=tfboard_log_folder, seed=args.seed+i)
+        # activations = {}
+        # def get_activation(name):
+        #     def hook(model, input, output):
+        #         activations[name] = output.detach()
+        #     return hook
+        # model.policy.mlp_extractor.policy_net[1].register_forward_hook(get_activation(1))
+        # model.policy.mlp_extractor.policy_net[3].register_forward_hook(get_activation(3))
+        # print(activations)
+        # #mlp_extractor.policy_net
     elif args.model == "DQN":
         model = DQN(args.policy, env, learning_rate=lr, # buffer_size=args.buffer_size,
                     # target_update_interval=args.target_update_interval, exploration_initial_eps=args.epsilon_initial, 
