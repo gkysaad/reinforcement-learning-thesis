@@ -1,5 +1,7 @@
 import pandas as pd
 import os
+import matplotlib.pyplot as plt
+
 
 # loop through activations folder
 act_folder = ".activations/"
@@ -20,5 +22,8 @@ for f in act_files:
     # add to dataframe
     df = df.append({"num_iterations": num_rows, "layer1": df_temp[0], "layer2": df_temp[1]}, ignore_index=True)
 
-df.plot(y="num_iterations", x=["layer1", "layer2"], kind="scatter")
+print(df.head(), df.shape)
+df.plot(y="num_iterations", x="layer1", kind="scatter")
+df.plot(y="num_iterations", x="layer2", kind="scatter")
 
+plt.show()
