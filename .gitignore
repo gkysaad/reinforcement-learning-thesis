@@ -359,4 +359,3 @@ src/models/*
 src/test.py
 src/data/*
 src/stable_baselines3_old/
-src/.activations/
