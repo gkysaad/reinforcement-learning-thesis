@@ -92,9 +92,9 @@ def make_model(args, env, i):
 
 def get_entropy(activations):
     hist_activations = np.histogram(activations.numpy().squeeze(), bins=7)
-    hist_counts = hist_activations[0]
+    hist_counts = hist_activations[0] + 0.000001 # add epsilon to avoid log(0)
     hist_freqs = hist_counts / np.sum(hist_counts)
-    run_ent_val = -np.sum(hist_freqs * np.log(hist_freqs, out=np.zeros_like(hist_freqs), where=(hist_freqs!=0)))
+    run_ent_val = -np.sum(hist_freqs * np.log(hist_freqs, out=np.zeros_like(hist_freqs)))
     return run_ent_val
 
 def drl(args, i):
