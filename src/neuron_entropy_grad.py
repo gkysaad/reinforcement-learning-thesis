@@ -161,12 +161,15 @@ def get_neuron_activation_with_grads(feats, model, actions, activations):
     # Neuron activation entropy calculated w.r.t. each action, for each neuron
     action_values = [0,1]
     atv_with_grad = [] # [run1, run2, ...] -> run1={action1:((atv1, grad1), ...
+    counter = 0
     for f, m, a, av in zip(feats, model, actions, activations):
+        counter += 1
         action_run_atv_with_grad = {}
         for act in action_values:
             act_idx = torch.from_numpy(np.where(a == act)[0])
             act_activations = av[act_idx, :]
             sub_run_atv_with_grad = []
+            # print("act_activations: ", act_activations.shape, " act: ", act, " counter: ", counter)
             for idx in range(act_activations.shape[1]):
                 neuron_activation = act_activations[:, idx].detach().numpy()\
                     .squeeze()
@@ -188,6 +191,7 @@ def get_neuron_activation_with_grads(feats, model, actions, activations):
 def get_neuron_entropy(actions, activations):
     # Calculate neuron entropy per run
     # Neuron activation entropy calculated w.r.t. each action, for each neuron
+    print("enters get_neuron_entropy")
     action_values = [0,1]
     run_entropy = []
     for a, av in zip(actions, activations):
@@ -203,6 +207,7 @@ def get_neuron_entropy(actions, activations):
 
 def neuron_entropy(args, actions, activations, rew_step, threshold):
     # Calculate the sample efficiency boost for some threshold percent
+    print("enters neuron_entropy")
     run_entropy = get_neuron_entropy(actions, activations)
     threshold_idx = int(threshold*len(run_entropy)) if threshold != 1 \
         else len(run_entropy)-1
@@ -221,48 +226,54 @@ def neuron_entropy(args, actions, activations, rew_step, threshold):
     sample_efficiency = total_success / total_iters
     return sample_efficiency
 
-def neuron_entropy_with_grad(args, run_activations, run_entropy, rew_step,\
+def neuron_entropy_with_grad(args, run_activations, rew_step,\
      neuron_threshold, grad_threshold, weight_grad=0):
-    print("weight_grad: ", weight_grad)
+    # print("weight_grad: ", weight_grad)
     # Calculate Neuron Entropy
     run_with_grad_entropy = []
+    print("num runs: ", len(run_activations))
     for run in run_activations:
         run_ent_val = 0
+        # print("run: ", run)
+        # print("run: ", run.items())
         for _, act_and_grad in run.items():
             activation = torch.tensor([i[0] for i in act_and_grad])
-            gradients = torch.tensor([i[1] for i in act_and_grad])
-            grad_mean = torch.abs(torch.mean(gradients, axis=1))
-            k = min(int(grad_threshold*128), 127) 
-            grad_mags, topk_idxs = torch.topk(grad_mean, k) # just take neurons with largest grads
-            if len(topk_idxs) != 0:
-                for grad_mag, idx in zip(grad_mags, topk_idxs): # idx = neurons
-                    if weight_grad == 0:
-                        print(activation[idx, :].detach().numpy().squeeze())
-                        print(activation[idx, :].detach().numpy().squeeze().shape)
-                        hist_activations = np.histogram(activation[idx, :].detach().numpy().squeeze(), bins=7)
-                        hist_counts = hist_activations[0]
-                        hist_freqs = hist_counts / np.sum(hist_counts)
-                        run_ent_val = -np.sum(hist_freqs * np.log(hist_freqs, out=np.zeros_like(hist_freqs), where=(hist_freqs!=0)))
+            # gradients = torch.tensor([i[1] for i in act_and_grad])
+            # grad_mean = torch.abs(torch.mean(gradients, axis=1))
+            # k = min(int(grad_threshold*128), 127) 
+            # grad_mags, topk_idxs = torch.topk(grad_mean, k) # just take neurons with largest grads
+            # if len(topk_idxs) != 0:
+                # for grad_mag, idx in zip(grad_mags, topk_idxs): # idx = neurons
+                #     if weight_grad == 0:
+            # print(activation[idx, :].detach().numpy().squeeze())
+            # print(activation.detach().numpy().squeeze().shape)
+            # hist_activations = np.histogram(activation[idx, :].detach().numpy().squeeze(), bins=7)
+            hist_activations = np.histogram(activation.detach().numpy().squeeze(), bins=7)
+            hist_counts = hist_activations[0]
+            hist_freqs = hist_counts / np.sum(hist_counts)
+            run_ent_val = -np.sum(hist_freqs * np.log(hist_freqs, out=np.zeros_like(hist_freqs), where=(hist_freqs!=0)))
                         # run_ent_val += entropy(hist_freqs) 
                         # run_ent_val += entropy(norm.pdf(\
                         #     activation[idx, :].detach().numpy().squeeze()))
                         # threshold with median
                         # standard deviation
                         # put into buckets (7 bins) then compute entropy
-                    elif weight_grad == 1:
-                        run_ent_val += grad_mag.item()*entropy(\
-                            norm.pdf(activation[idx, :].detach().numpy()\
-                                .squeeze()))
+                    # elif weight_grad == 1:
+                    #     run_ent_val += grad_mag.item()*entropy(\
+                    #         norm.pdf(activation[idx, :].detach().numpy()\
+                    #             .squeeze()))
         run_with_grad_entropy.append(run_ent_val)
     
     # Calculate the sample efficiency boost for some threshold percent
-    threshold_idx = int(neuron_threshold*len(run_entropy)) if \
-        neuron_threshold != 1 else len(run_entropy)-1
-    threshold_val = sorted(run_with_grad_entropy)[threshold_idx]
+    # threshold_idx = int(neuron_threshold*len(run_entropy)) if \
+    #     neuron_threshold != 1 else len(run_entropy)-1
+    # threshold_val = sorted(run_with_grad_entropy)[threshold_idx]
+    threshold_val = neuron_threshold
     total_iters = 0
     total_success = 0
     for idx, step in enumerate(rew_step):
-        if run_with_grad_entropy[idx] < threshold_val:
+        print("step: ", step, " idx: ", idx, " run_with_grad_entropy: ", run_with_grad_entropy[idx], " threshold_val: ", threshold_val)
+        if run_with_grad_entropy[idx] > threshold_val:
             if step != -1:
                 total_success += 1
                 total_iters += step
@@ -281,8 +292,23 @@ def main(args):
     # gets the # of steps at which the reward threshold is reached for each run
     rew_step = load_sheets(args, args.dir, xlsx_name)
 
-    print(activations[0].shape)
-    print(actions[0].shape)
+    print("models: ", len(models), " activations: ", len(activations), " actions: ", len(actions), " feats: ", len(feats), " rew_step: ", len(rew_step))
+
+    for i in range(1,5):
+        args.dir = args.dir[:-3] + str(i*100)
+        args.xlsx_name = args.xlsx_name[:-8] + str(i*100) + ".xlsx"
+        models2, activations2, actions2, feats2 = get_tensors_and_model(args)
+
+        models = models + models2
+        activations = activations + activations2
+        actions = actions + actions2
+        feats = feats + feats2
+
+        xlsx_name = get_out_file_name(args.dir, args.xlsx_name)
+        rew_step2 = load_sheets(args, args.dir, xlsx_name)
+        rew_step = rew_step + rew_step2 
+
+    print("models: ", len(models), " activations: ", len(activations), " actions: ", len(actions), " feats: ", len(feats), " rew_step: ", len(rew_step))
 
     first_models = [m[1] for m in models]
     first_feats = [f[50:args.n_eval+50, :] for f in feats]
@@ -293,6 +319,8 @@ def main(args):
     print(first_actions[0].shape)
 
     if args.task == "neuron_entropy":
+        # ignore, not run
+        print("THIS SHOULD NOT RUN")
         ne_boosts = []
         thresholds = np.linspace(0, 1, args.threshold_steps)
         for threshold in thresholds:
@@ -303,58 +331,81 @@ def main(args):
         plt.plot(thresholds, ne_boosts)
         plt.show()
     elif args.task == "neuron_entropy_grad":
+        print("ENTERS CORRECT TASK")
         atv_with_grad = get_neuron_activation_with_grads(first_feats, 
                                                         first_models, 
                                                         first_actions, 
                                                         first_activations)
-        run_entropy = get_neuron_entropy(first_actions, first_activations)
+        # run_entropy = get_neuron_entropy(first_actions, first_activations)
 
-        thresholds = np.around(np.linspace(0, 1, args.threshold_steps)\
-            , decimals=1)
-        grad_thresholds = np.around(np.linspace(\
-            0, 1, args.grad_threshold_steps), decimals=1)
-        se_boosts = np.zeros((args.grad_threshold_steps, args.threshold_steps))
+        # print("run_entropy shape: ", len(run_entropy))
+        # print("run_entropy: ", run_entropy)
+
+        thresholds = np.linspace(1, 2, args.threshold_steps)
+        thresholds = np.insert(thresholds, 0, 0)
+        # thresholds = np.around(np.linspace(0, 1, args.threshold_steps)\
+        #     , decimals=1)
+        # grad_thresholds = np.around(np.linspace(\
+        #     0, 1, args.grad_threshold_steps), decimals=1)
+        se_boosts = np.zeros((args.threshold_steps + 1))
         for n_idx, n_threshold in enumerate(thresholds):
-            for ng_idx, ng_threshold in enumerate(grad_thresholds):
-                se_boosts[ng_idx, n_idx] = neuron_entropy_with_grad(args, \
-                    atv_with_grad, run_entropy, rew_step, n_threshold, \
-                    ng_threshold, args.weight_grad)
-                print("PROGRESS: ", n_idx, ng_idx)
+            # for ng_idx, ng_threshold in enumerate(grad_thresholds):
+            # se_boosts[ng_idx, n_idx] = neuron_entropy_with_grad(args, \
+            #     atv_with_grad, run_entropy, rew_step, n_threshold, \
+            #     ng_threshold, args.weight_grad)
+            se_boosts[n_idx] = neuron_entropy_with_grad(args, \
+                atv_with_grad, rew_step, n_threshold, \
+                0, args.weight_grad)
+            # print("PROGRESS: ", n_idx)
+            print("PROGRESS: ", n_idx, " ", se_boosts[n_idx])
         
-        sb.heatmap(se_boosts, xticklabels=thresholds,\
-             yticklabels=grad_thresholds)
+        print(se_boosts)
+        print("Best Threshold: ", thresholds[np.argmax(se_boosts)])
+
+        print("SE Boost Percents: ")
+        percents = [(se_boosts[i] - se_boosts[0])/se_boosts[0] * 100 for i in range(len(se_boosts))]
+        print(percents)
+        
+        # sb.heatmap(se_boosts, xticklabels=thresholds,\
+        #      yticklabels=grad_thresholds)
+        plt.plot(thresholds, se_boosts, label="Sample Efficiency", color="blue")
+        plt.xlabel("Neuron Entropy Threshold")
+        plt.ylabel("Sample Efficiency")
+        plt.plot(thresholds[np.argmax(se_boosts)], np.max(se_boosts), marker="o", color="red")
         plt.tight_layout()
-        plt.savefig(os.path.join(args.dir,"heatmap.png"))
+        plt.show()
+        plt.savefig(os.path.join(args.dir,"new_neuron_entropy_se.png"))
 
         plt.figure().clear()
         plt.close()
         plt.cla()
         plt.clf()
 
-        pc_boosts = se_boosts/se_boosts[-1, -1]
-        nan_pc_boosts = pc_boosts.copy()
-        nan_pc_boosts[nan_pc_boosts == 0] = np.nan
-        print("AVG BOOST:", np.nanmean(nan_pc_boosts))
-        print("MAX BOOST: ", np.amax(pc_boosts))
-        print("VAL BOOST 0.7: ", pc_boosts[-1, int(pc_boosts.shape[1]*0.7)])
-        print("VAL BOOST 0.8: ", pc_boosts[-1, int(pc_boosts.shape[1]*0.8)])
+        # pc_boosts = se_boosts/se_boosts[-1, -1]
+        # nan_pc_boosts = pc_boosts.copy()
+        # nan_pc_boosts[nan_pc_boosts == 0] = np.nan
+        # print("AVG BOOST:", np.nanmean(nan_pc_boosts))
+        # print("MAX BOOST: ", np.amax(pc_boosts))
+        # print("VAL BOOST 0.7: ", pc_boosts[-1, int(pc_boosts.shape[1]*0.7)])
+        # print("VAL BOOST 0.8: ", pc_boosts[-1, int(pc_boosts.shape[1]*0.8)])
 
-        results_file = open(os.path.join(args.dir, "results.txt"), "w")
-        results_file.write("AVG BOOST: " + str(np.nanmean(nan_pc_boosts)) + "\n" + \
-            "MAX BOOST: " + str(np.amax(pc_boosts)) + "\n" + \
-            "VAL BOOST 0.7: " + str(pc_boosts[-1, int(pc_boosts.shape[1]*0.7)]) + \
-            "\n" + "VAL BOOST 0.8: " + str(pc_boosts[-1, int(pc_boosts.shape[1]*0.8)]))
-        results_file.close()
+        # results_file = open(os.path.join(args.dir, "results.txt"), "w")
+        # results_file.write("AVG BOOST: " + str(np.nanmean(nan_pc_boosts)) + "\n" + \
+        #     "MAX BOOST: " + str(np.amax(pc_boosts)) + "\n" + \
+        #     "VAL BOOST 0.7: " + str(pc_boosts[-1, int(pc_boosts.shape[1]*0.7)]) + \
+        #     "\n" + "VAL BOOST 0.8: " + str(pc_boosts[-1, int(pc_boosts.shape[1]*0.8)]))
+        # results_file.close()
 
-        sb.heatmap(pc_boosts, xticklabels=thresholds, yticklabels=grad_thresholds)
-        plt.tight_layout()
-        # print(os.path.exists(args.dir))
-        plt.savefig(os.path.join(args.dir, "heatmap_pc.png"))
+        # # sb.heatmap(pc_boosts, xticklabels=thresholds, yticklabels=grad_thresholds)
+        # sb.heatmap(pc_boosts, xticklabels=thresholds)
+        # plt.tight_layout()
+        # # print(os.path.exists(args.dir))
+        # plt.savefig(os.path.join(args.dir, "heatmap_pc.png"))
 
-        plt.figure().clear()
-        plt.close()
-        plt.cla()
-        plt.clf()
+        # plt.figure().clear()
+        # plt.close()
+        # plt.cla()
+        # plt.clf()
 
         
 
