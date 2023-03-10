@@ -10,6 +10,7 @@ import seaborn as sb
 import matplotlib.pyplot as plt
 import torch.nn as nn
 import torch.nn.functional as F
+import csv
 
 from stable_baselines3_thesis.common.torch_layers import MlpExtractor
 from captum.attr import LayerGradCam, GuidedGradCam
@@ -42,6 +43,8 @@ parser.add_argument('--threshold_steps', default=11, type=int)
 parser.add_argument('--grad_threshold_steps', default=4, type=int)
 parser.add_argument('--weight_grad', default=0, type=int, help='whether to weight\
      neuron activation entropy by grad magnitude')
+parser.add_argument('--run_type', default='train', help='train or test')
+parser.add_argument('--threshold', default=None, type=float)
 
 
 def get_tensors_and_model(args):
@@ -294,9 +297,12 @@ def main(args):
 
     print("models: ", len(models), " activations: ", len(activations), " actions: ", len(actions), " feats: ", len(feats), " rew_step: ", len(rew_step))
 
+    start_ind = int(args.dir[-3])
     for i in range(1,5):
+        i += start_ind
         args.dir = args.dir[:-3] + str(i*100)
         args.xlsx_name = args.xlsx_name[:-8] + str(i*100) + ".xlsx"
+        print("args.xlsx_name: ", args.xlsx_name)
         models2, activations2, actions2, feats2 = get_tensors_and_model(args)
 
         models = models + models2
@@ -365,7 +371,7 @@ def main(args):
         print("SE Boost Percents: ")
         percents = [(se_boosts[i] - se_boosts[0])/se_boosts[0] * 100 for i in range(len(se_boosts))]
         print(percents)
-        
+
         # sb.heatmap(se_boosts, xticklabels=thresholds,\
         #      yticklabels=grad_thresholds)
         plt.plot(thresholds, se_boosts, label="Sample Efficiency", color="blue")
@@ -373,13 +379,21 @@ def main(args):
         plt.ylabel("Sample Efficiency")
         plt.plot(thresholds[np.argmax(se_boosts)], np.max(se_boosts), marker="o", color="red")
         plt.tight_layout()
+        plt.savefig("neuron_entropy_{}.png".format(args.run_type))
         plt.show()
-        plt.savefig(os.path.join(args.dir,"new_neuron_entropy_se.png"))
 
         plt.figure().clear()
         plt.close()
         plt.cla()
         plt.clf()
+
+        # create csv file to store results
+        csv_file = open(f"{args.run_type}_results.csv", "w", newline="")
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(["Threshold", "Sample Efficiency", "Percent Change"])
+        for i in range(thresholds.shape[0]):
+            csv_writer.writerow([thresholds[i], se_boosts[i], percents[i]])
+        csv_file.close()
 
         # pc_boosts = se_boosts/se_boosts[-1, -1]
         # nan_pc_boosts = pc_boosts.copy()
