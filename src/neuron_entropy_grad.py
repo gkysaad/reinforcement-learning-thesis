@@ -379,7 +379,7 @@ def main(args):
         plt.ylabel("Sample Efficiency")
         plt.plot(thresholds[np.argmax(se_boosts)], np.max(se_boosts), marker="o", color="red")
         plt.tight_layout()
-        plt.savefig("neuron_entropy_{}.png".format(args.run_type))
+        plt.savefig("neuron_entropy_{}_{}.png".format(args.run_type, len(thresholds)))
         plt.show()
 
         plt.figure().clear()
@@ -388,7 +388,7 @@ def main(args):
         plt.clf()
 
         # create csv file to store results
-        csv_file = open(f"{args.run_type}_results.csv", "w", newline="")
+        csv_file = open(f"{args.run_type}_results_{len(thresholds)}.csv", "w", newline="")
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow(["Threshold", "Sample Efficiency", "Percent Change"])
         for i in range(thresholds.shape[0]):
