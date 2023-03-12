@@ -8,6 +8,7 @@ import gym
 import torch
 import random
 import numpy as np
+from tqdm import tqdm
 
 from common import *
 
@@ -32,7 +33,7 @@ parser.add_argument('--steps', default=100000, type=int)
 parser.add_argument('--n_env', default=10, type=int)
 parser.add_argument('--disable_reward_threshold', default=0, type=int)
 parser.add_argument('--reward_threshold', default=195, type=int)
-parser.add_argument('--reward_threshold_episodes', default=100, type=int)
+parser.add_argument('--reward_threshold_epreqisodes', default=100, type=int)
 parser.add_argument('--eval_freq', default=100, type=int) # eval_freq --> eval_freq * n_env
 
 # ==> DRL Framework Specific Parameters
@@ -106,28 +107,28 @@ def drl(args, i):
 
         # ADDED CODE
         # Save activations
-        act_folder = ".activations/"
-        if not os.path.isdir(act_folder):
-            os.makedirs(act_folder)
-        # create file in act_folder for i-th run
-        acts_csv = open(act_folder + args.model + "_" + str(i+1) + ".csv", "w")
+        # act_folder = ".activations/"
+        # if not os.path.isdir(act_folder):
+        #     os.makedirs(act_folder)
+        # # create file in act_folder for i-th run
+        # acts_csv = open(act_folder + args.model + "_" + str(i+1) + ".csv", "w")
 
-        def get_activation(name):
-            def hook(model, input, output):
-                ent_val = get_entropy(output.detach())
-                if name == 1:
-                    acts_csv.write(str(ent_val) + ",")
-                elif name == 3:
-                    acts_csv.write(str(ent_val) + "\n")                
-            return hook
-        model.policy.mlp_extractor.policy_net[1].register_forward_hook(get_activation(1))
-        model.policy.mlp_extractor.policy_net[3].register_forward_hook(get_activation(3))
+        # def get_activation(name):
+        #     def hook(model, input, output):
+        #         ent_val = get_entropy(output.detach())
+        #         if name == 1:
+        #             acts_csv.write(str(ent_val) + ",")
+        #         elif name == 3:
+        #             acts_csv.write(str(ent_val) + "\n")                
+        #     return hook
+        # model.policy.mlp_extractor.policy_net[1].register_forward_hook(get_activation(1))
+        # model.policy.mlp_extractor.policy_net[3].register_forward_hook(get_activation(3))
         # END ADDED CODE
 
 
         model.learn(total_timesteps=args.steps, eval_freq=1, n_eval_episodes=1, log_interval=1, callback=eval_callback)
 
-        acts_csv.close()
+        # acts_csv.close()
 
         model.save(tf_log + args.model + "_" + str(i+1) + "/model")
     else:
@@ -137,7 +138,7 @@ def drl(args, i):
 
 def main(args):
     # TO DO: Parallelize environments
-    for i in range(args.repeat):
+    for i in tqdm(range(args.repeat), desc="Running for 100 seeds"):
         torch.manual_seed(args.seed + i)
         np.random.seed(args.seed + i)
         random.seed(args.seed + i)

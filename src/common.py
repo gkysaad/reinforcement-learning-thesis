@@ -22,12 +22,12 @@ def get_model(args, env, tfboard_log_folder, i):
     # Creates a new model
     if args.model == "A2C":
         # Specify network parameters: actor=pi, value function=vf
-        print(args.activation_fn)
+        # print(args.activation_fn)
         if args.activation_fn == "relu":
             act_fn = nn.ReLU
         elif args.activation_fn == "tanh":
             act_fn = nn.Tanh
-        print(act_fn)
+        # print(act_fn)
         neuron_list = [args.num_neurons_per_layer for _ in range(args.num_layers)]
         policy_kwargs = dict(net_arch=[dict(pi=neuron_list, vf=neuron_list)],
                              activation_logdir=tfboard_log_folder,
