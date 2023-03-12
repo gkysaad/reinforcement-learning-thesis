@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 import torch.nn.functional as F
 import csv
+from tqdm import tqdm
 
 from stable_baselines3_thesis.common.torch_layers import MlpExtractor
 from captum.attr import LayerGradCam, GuidedGradCam
@@ -165,7 +166,7 @@ def get_neuron_activation_with_grads(feats, model, actions, activations):
     # action_values = [0,1]
     atv_with_grad = [] # [run1, run2, ...] -> run1={action1:((atv1, grad1), ...
     counter = 0
-    for f, m, a, av in zip(feats, model, actions, activations):
+    for f, m, a, av in tqdm(zip(feats, model, actions, activations), total = min(len(feats), len(model), len(actions), len(activations))):
         counter += 1
         action_run_atv_with_grad = {}
         # for act in action_values:
@@ -331,8 +332,8 @@ def main(args):
     first_actions = [a[50:args.n_eval+50, :] for a in actions]
     first_activations = [a[50:args.n_eval+50, :] for a in activations]
 
-    print(first_activations[0].shape)
-    print(first_actions[0].shape)
+    # print(first_activations[0].shape)
+    # print(first_actions[0].shape)
 
     if args.task == "neuron_entropy":
         # ignore, not run
@@ -357,7 +358,11 @@ def main(args):
         # print("run_entropy shape: ", len(run_entropy))
         # print("run_entropy: ", run_entropy)
         if args.weight_grad == 0:
-            thresholds = np.linspace(1, 2, args.threshold_steps)
+            if args.act_fcn == "relu":
+                thresholds = np.linspace(0, 1, args.threshold_steps)
+                thresholds = np.delete(thresholds, 0)
+            elif args.act_fcn == "tanh":
+                thresholds = np.linspace(1, 2, args.threshold_steps)
         else:
             thresholds = np.linspace(0.2, 1.4, args.threshold_steps)
         thresholds = np.insert(thresholds, 0, 0)
@@ -392,9 +397,9 @@ def main(args):
         plt.plot(thresholds[np.argmax(se_boosts)], np.max(se_boosts), marker="o", color="red")
         plt.tight_layout()
         if args.weight_grad == 0:
-            plt.savefig("neuron_entropy_{}_{}.png".format(args.run_type, len(thresholds)))
+            plt.savefig("neuron_entropy_{}_{}_{}.png".format(args.run_type, len(thresholds), args.act_fcn))
         else:
-            plt.savefig("neuron_entropy_grad_{}_{}.png".format(args.run_type, len(thresholds)))
+            plt.savefig("neuron_entropy_grad_{}_{}_{}.png".format(args.run_type, len(thresholds), args.act_fcn))
         plt.show()
 
         plt.figure().clear()
@@ -404,9 +409,9 @@ def main(args):
 
         # create csv file to store results
         if args.weight_grad == 0:
-            csv_file = open(f"{args.run_type}_results_{len(thresholds)}.csv", "w", newline="")
+            csv_file = open(f"{args.run_type}_results_{len(thresholds)}_{args.act_fcn}.csv", "w", newline="")
         else:
-            csv_file = open(f"{args.run_type}_grad_results_{len(thresholds)}.csv", "w", newline="")
+            csv_file = open(f"{args.run_type}_grad_results_{len(thresholds)}_{args.act_fcn}.csv", "w", newline="")
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow(["Threshold", "Sample Efficiency", "Percent Change"])
         for i in range(thresholds.shape[0]):
