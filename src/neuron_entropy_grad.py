@@ -162,31 +162,33 @@ def load_sheets(args, dir, xlsx_name):
 def get_neuron_activation_with_grads(feats, model, actions, activations):
     # Calculate neuron entropy per run
     # Neuron activation entropy calculated w.r.t. each action, for each neuron
-    action_values = [0,1]
+    # action_values = [0,1]
     atv_with_grad = [] # [run1, run2, ...] -> run1={action1:((atv1, grad1), ...
     counter = 0
     for f, m, a, av in zip(feats, model, actions, activations):
         counter += 1
         action_run_atv_with_grad = {}
-        for act in action_values:
-            act_idx = torch.from_numpy(np.where(a == act)[0])
-            act_activations = av[act_idx, :]
-            sub_run_atv_with_grad = []
-            # print("act_activations: ", act_activations.shape, " act: ", act, " counter: ", counter)
-            for idx in range(act_activations.shape[1]):
-                neuron_activation = act_activations[:, idx].detach().numpy()\
-                    .squeeze()
-                if args.method == 'gradcam':
-                    layer = LayerGradCam(m, m.policy_net[0] \
-                        if idx < 64 else m.policy_net[2])
-                elif args.method == 'gbp':
-                    layer = GuidedGradCam(m, m.policy_net[0] \
-                        if idx < 64 else m.policy_net[2])
-                
-                grad = layer.attribute(f, target=idx%64).squeeze()\
-                    .detach().numpy()
-                sub_run_atv_with_grad.append((neuron_activation, grad))
-            action_run_atv_with_grad[act] = sub_run_atv_with_grad
+        # for act in action_values:
+        #     act_idx = torch.from_numpy(np.where(a == act)[0])
+            # act_activations = av[act_idx, :]
+        act_activations = av
+        sub_run_atv_with_grad = []
+        # print("act_activations: ", act_activations.shape, " act: ", act, " counter: ", counter)
+        for idx in range(act_activations.shape[1]):
+            neuron_activation = act_activations[:, idx].detach().numpy()\
+                .squeeze()
+            if args.method == 'gradcam':
+                layer = LayerGradCam(m, m.policy_net[0] \
+                    if idx < 64 else m.policy_net[2])
+            elif args.method == 'gbp':
+                layer = GuidedGradCam(m, m.policy_net[0] \
+                    if idx < 64 else m.policy_net[2])
+            
+            grad = layer.attribute(f, target=idx%64).squeeze()\
+                .detach().numpy()
+            sub_run_atv_with_grad.append((neuron_activation, grad))
+        # action_run_atv_with_grad[act] = sub_run_atv_with_grad
+        action_run_atv_with_grad["all"] = sub_run_atv_with_grad
         atv_with_grad.append(action_run_atv_with_grad)
 
     return atv_with_grad
@@ -241,8 +243,14 @@ def neuron_entropy_with_grad(args, run_activations, rew_step,\
         # print("run: ", run.items())
         for _, act_and_grad in run.items():
             activation = torch.tensor([i[0] for i in act_and_grad])
-            # gradients = torch.tensor([i[1] for i in act_and_grad])
-            # grad_mean = torch.abs(torch.mean(gradients, axis=1))
+            gradients = torch.tensor([i[1] for i in act_and_grad])
+
+            # print("activation: ", activation.shape)
+            # print("gradients: ", gradients.shape)
+
+            if weight_grad == 1:
+                # print("GRAD WEIGHTED ENTROPY")
+                activation = activation * gradients
             # k = min(int(grad_threshold*128), 127) 
             # grad_mags, topk_idxs = torch.topk(grad_mean, k) # just take neurons with largest grads
             # if len(topk_idxs) != 0:
@@ -274,8 +282,10 @@ def neuron_entropy_with_grad(args, run_activations, rew_step,\
     threshold_val = neuron_threshold
     total_iters = 0
     total_success = 0
+    # plt.scatter(range(len(run_with_grad_entropy)), run_with_grad_entropy)
+    # plt.show()
     for idx, step in enumerate(rew_step):
-        print("step: ", step, " idx: ", idx, " run_with_grad_entropy: ", run_with_grad_entropy[idx], " threshold_val: ", threshold_val)
+        # print("step: ", step, " idx: ", idx, " run_with_grad_entropy: ", run_with_grad_entropy[idx], " threshold_val: ", threshold_val)
         if run_with_grad_entropy[idx] > threshold_val:
             if step != -1:
                 total_success += 1
@@ -346,14 +356,16 @@ def main(args):
 
         # print("run_entropy shape: ", len(run_entropy))
         # print("run_entropy: ", run_entropy)
-
-        thresholds = np.linspace(1, 2, args.threshold_steps)
+        if args.weight_grad == 0:
+            thresholds = np.linspace(1, 2, args.threshold_steps)
+        else:
+            thresholds = np.linspace(0.2, 1.4, args.threshold_steps)
         thresholds = np.insert(thresholds, 0, 0)
         # thresholds = np.around(np.linspace(0, 1, args.threshold_steps)\
         #     , decimals=1)
         # grad_thresholds = np.around(np.linspace(\
         #     0, 1, args.grad_threshold_steps), decimals=1)
-        se_boosts = np.zeros((args.threshold_steps + 1))
+        se_boosts = np.zeros((len(thresholds)))
         for n_idx, n_threshold in enumerate(thresholds):
             # for ng_idx, ng_threshold in enumerate(grad_thresholds):
             # se_boosts[ng_idx, n_idx] = neuron_entropy_with_grad(args, \
@@ -379,7 +391,10 @@ def main(args):
         plt.ylabel("Sample Efficiency")
         plt.plot(thresholds[np.argmax(se_boosts)], np.max(se_boosts), marker="o", color="red")
         plt.tight_layout()
-        plt.savefig("neuron_entropy_{}_{}.png".format(args.run_type, len(thresholds)))
+        if args.weight_grad == 0:
+            plt.savefig("neuron_entropy_{}_{}.png".format(args.run_type, len(thresholds)))
+        else:
+            plt.savefig("neuron_entropy_grad_{}_{}.png".format(args.run_type, len(thresholds)))
         plt.show()
 
         plt.figure().clear()
@@ -388,7 +403,10 @@ def main(args):
         plt.clf()
 
         # create csv file to store results
-        csv_file = open(f"{args.run_type}_results_{len(thresholds)}.csv", "w", newline="")
+        if args.weight_grad == 0:
+            csv_file = open(f"{args.run_type}_results_{len(thresholds)}.csv", "w", newline="")
+        else:
+            csv_file = open(f"{args.run_type}_grad_results_{len(thresholds)}.csv", "w", newline="")
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow(["Threshold", "Sample Efficiency", "Percent Change"])
         for i in range(thresholds.shape[0]):
