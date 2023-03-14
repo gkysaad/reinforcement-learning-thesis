@@ -37,6 +37,7 @@ parser.add_argument('--n_steps_max', default=100000)
 parser.add_argument('--reward_threshold', default=195, type=int)
 parser.add_argument('--method', default="gradcam")
 parser.add_argument('--act_fcn', default="tanh")
+parser.add_argument('--env', default="CartPole-v0")
 
 # ==> Threshold Parameters
 parser.add_argument('--task', default='neuron_entropy_grad')
@@ -362,7 +363,10 @@ def main(args):
                 thresholds = np.linspace(0, 1, args.threshold_steps)
                 thresholds = np.delete(thresholds, 0)
             elif args.act_fcn == "tanh":
-                thresholds = np.linspace(1, 2, args.threshold_steps)
+                if args.env == "CartPole-v1":
+                    thresholds = np.linspace(0.6, 1.6, args.threshold_steps)
+                else:
+                    thresholds = np.linspace(1, 2, args.threshold_steps)
         else:
             thresholds = np.linspace(0.2, 1.4, args.threshold_steps)
         thresholds = np.insert(thresholds, 0, 0)
@@ -397,9 +401,9 @@ def main(args):
         plt.plot(thresholds[np.argmax(se_boosts)], np.max(se_boosts), marker="o", color="red")
         plt.tight_layout()
         if args.weight_grad == 0:
-            plt.savefig("neuron_entropy_{}_{}_{}.png".format(args.run_type, len(thresholds), args.act_fcn))
+            plt.savefig("neuron_entropy_{}_{}_{}_{}.png".format(args.run_type, len(thresholds), args.act_fcn, args.env[-2:]))
         else:
-            plt.savefig("neuron_entropy_grad_{}_{}_{}.png".format(args.run_type, len(thresholds), args.act_fcn))
+            plt.savefig("neuron_entropy_grad_{}_{}_{}_{}.png".format(args.run_type, len(thresholds), args.act_fcn, args.env[-2:]))
         plt.show()
 
         plt.figure().clear()
@@ -409,7 +413,7 @@ def main(args):
 
         # create csv file to store results
         if args.weight_grad == 0:
-            csv_file = open(f"{args.run_type}_results_{len(thresholds)}_{args.act_fcn}.csv", "w", newline="")
+            csv_file = open(f"{args.run_type}_results_{len(thresholds)}_{args.act_fcn}_{args.env[-2:]}.csv", "w", newline="")
         else:
             csv_file = open(f"{args.run_type}_grad_results_{len(thresholds)}_{args.act_fcn}.csv", "w", newline="")
         csv_writer = csv.writer(csv_file)
