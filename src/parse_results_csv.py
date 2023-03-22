@@ -5,7 +5,7 @@ import csv
 results = open('experiment_summary.csv', 'w', newline='')
 # write header using csv writer
 csv_writer = csv.writer(results)
-csv_writer.writerow(['file', 'type', 'activation', 'threshold_steps', 'env', 'control_se', 'highest_se', 'highest_se_boost', 'highest_se_threshold'])
+csv_writer.writerow(['file', 'type', 'activation', 'threshold_steps', 'env', 'control_se', 'highest_se', 'highest_se_boost (%)', 'highest_se_threshold'])
 
 train_rows = []
 test_rows = []

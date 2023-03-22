@@ -1,4 +1,4 @@
-file,type,activation,threshold_steps,env,control_se,highest_se,highest_se_boost,highest_se_threshold
+file,type,activation,threshold_steps,env,control_se,highest_se,highest_se_boost (%),highest_se_threshold
 train_grad_results_122_tanh_v0.csv,train,tanh,122,v0,0.000208333,0.000249017,19.52817824,1.09
 test_grad_results_122_tanh_v0.csv,test,tanh,122,v0,0.000206526,0.000210868,2.102189781,0.98
 ,,,,,,,,
