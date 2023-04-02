@@ -555,6 +555,7 @@ class ActorCriticPolicy(BasePolicy):
             lr_schedule(1) is the initial learning rate
         """
         self._build_mlp_extractor()
+        # print("POLICY NET: ", self.mlp_extractor.policy_net)
 
         latent_dim_pi = self.mlp_extractor.latent_dim_pi
 

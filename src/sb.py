@@ -33,7 +33,7 @@ parser.add_argument('--steps', default=100000, type=int)
 parser.add_argument('--n_env', default=10, type=int)
 parser.add_argument('--disable_reward_threshold', default=0, type=int)
 parser.add_argument('--reward_threshold', default=195, type=int)
-parser.add_argument('--reward_threshold_epreqisodes', default=100, type=int)
+parser.add_argument('--reward_threshold_episodes', default=100, type=int)
 parser.add_argument('--eval_freq', default=100, type=int) # eval_freq --> eval_freq * n_env
 
 # ==> DRL Framework Specific Parameters

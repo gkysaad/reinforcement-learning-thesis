@@ -116,6 +116,7 @@ def get_tensors_and_model(args):
             elif args.act_fcn == "relu":
                 model = MlpExtractor(feature_dim=4, \
                     net_arch=[dict(pi=[64,64], vf=[64,64])], activation_fn=nn.ReLU).cpu()
+            # print(model)
             model.load_state_dict(torch.load(model_path))
             model.gradcam_forward = True
             sub_models.append(model)
@@ -179,6 +180,7 @@ def get_neuron_activation_with_grads(feats, model, actions, activations):
         for idx in range(act_activations.shape[1]):
             neuron_activation = act_activations[:, idx].detach().numpy()\
                 .squeeze()
+            # print("policy: ", m.policy_net)
             if args.method == 'gradcam':
                 layer = LayerGradCam(m, m.policy_net[0] \
                     if idx < 64 else m.policy_net[2])
@@ -360,8 +362,8 @@ def main(args):
         # print("run_entropy: ", run_entropy)
         if args.weight_grad == 0:
             if args.act_fcn == "relu":
-                thresholds = np.linspace(0, 1, args.threshold_steps)
-                thresholds = np.delete(thresholds, 0)
+                thresholds = np.linspace(0.4, 1.3, args.threshold_steps)
+                # thresholds = np.delete(thresholds, 0)
             elif args.act_fcn == "tanh":
                 if args.env == "CartPole-v1":
                     thresholds = np.linspace(0.6, 1.6, args.threshold_steps)

@@ -353,6 +353,8 @@ MigrationBackup/
 # Project Specific Git Ignores
 src/results-relu/
 src/results-tanh/
+src/results-relu_tanh/
+src/results-tanh-v1/
 src/old-tanh/
 src/results/
 src/models/*

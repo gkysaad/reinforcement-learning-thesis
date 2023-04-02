@@ -115,7 +115,7 @@ def create_mlp(
         activation function
     :return:
     """
-    print("act fcn: ", activation_fn)
+    print("enters create_mlp")
     if len(net_arch) > 0:
         modules = [nn.Linear(input_dim, net_arch[0]), activation_fn()]
     else:
@@ -211,6 +211,10 @@ class MlpExtractor(nn.Module):
                 value_net.append(nn.Linear(last_layer_dim_vf, vf_layer_size))
                 value_net.append(activation_fn())
                 last_layer_dim_vf = vf_layer_size
+        
+        #ADDED CODE: force policy to have tanh at end (remove last act fcn)
+        policy_net = policy_net[:-1]
+        policy_net.append(nn.Tanh())
 
         # Save dim, used to create the distributions
         self.latent_dim_pi = last_layer_dim_pi
