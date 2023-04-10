@@ -176,17 +176,21 @@ def get_neuron_activation_with_grads(feats, model, actions, activations):
             # act_activations = av[act_idx, :]
         act_activations = av
         sub_run_atv_with_grad = []
-        # print("act_activations: ", act_activations.shape, " act: ", act, " counter: ", counter)
+        # print("act_activations: ", act_activations.shape)
         for idx in range(act_activations.shape[1]):
             neuron_activation = act_activations[:, idx].detach().numpy()\
                 .squeeze()
-            # print("policy: ", m.policy_net)
+            print("policy: ", m.policy_net)
             if args.method == 'gradcam':
                 layer = LayerGradCam(m, m.policy_net[0] \
                     if idx < 64 else m.policy_net[2])
             elif args.method == 'gbp':
-                layer = GuidedGradCam(m, m.policy_net[0] \
-                    if idx < 64 else m.policy_net[2])
+                if idx < 64:
+                    layer = GuidedGradCam(m, m.policy_net[0])
+                else:
+                    layer = LayerGradCam(m, m.policy_net[2])
+                # layer = GuidedGradCam(m, m.policy_net[0] \
+                #     if idx < 64 else m.policy_net[2])
             
             grad = layer.attribute(f, target=idx%64).squeeze()\
                 .detach().numpy()
@@ -234,6 +238,77 @@ def neuron_entropy(args, actions, activations, rew_step, threshold):
             total_iters += args.n_eval
     sample_efficiency = total_success / total_iters
     return sample_efficiency
+
+def collect_data(run_activations, rew_step, csv_file=None):
+    run_entropy = []
+    run_with_grad_entropy = []
+    run_entropy_l1 = []
+    run_entropy_l1_with_grad = []
+    run_entropy_l2 = []
+    run_entropy_l2_with_grad = []
+    print("num runs: ", len(run_activations))
+    for run in run_activations:
+        for _, act_and_grad in run.items():
+            activation = torch.tensor([i[0] for i in act_and_grad])
+            gradients = torch.tensor([i[1] for i in act_and_grad])
+
+            weighted_act = activation * gradients
+          
+            hist_activations = np.histogram(activation.detach().numpy().squeeze(), bins=7)
+            hist_counts = hist_activations[0]
+            hist_freqs = hist_counts / np.sum(hist_counts)
+            run_ent_val = -np.sum(hist_freqs * np.log(hist_freqs, out=np.zeros_like(hist_freqs), where=(hist_freqs!=0)))
+
+            hist_activations = np.histogram(weighted_act.detach().numpy().squeeze(), bins=7)
+
+            # do the same but with weighted activations
+            hist_activations = np.histogram(weighted_act.detach().numpy().squeeze(), bins=7)
+            hist_counts = hist_activations[0]
+            hist_freqs = hist_counts / np.sum(hist_counts)
+            run_with_grad_ent_val = -np.sum(hist_freqs * np.log(hist_freqs, out=np.zeros_like(hist_freqs), where=(hist_freqs!=0)))
+
+            first_activations = activation[:64, :]
+            second_activations = activation[64:, :]
+
+            first_grads = gradients[:64, :]
+            second_grads = gradients[64:, :]
+
+            first_weighted_act = first_activations * first_grads
+            second_weighted_act = second_activations * second_grads
+
+            hist_activations = np.histogram(first_activations.detach().numpy().squeeze(), bins=7)
+            hist_counts = hist_activations[0]
+            hist_freqs = hist_counts / np.sum(hist_counts)
+            run_entropy_l1.append(-np.sum(hist_freqs * np.log(hist_freqs, out=np.zeros_like(hist_freqs), where=(hist_freqs!=0))))
+
+            hist_activations = np.histogram(second_activations.detach().numpy().squeeze(), bins=7)
+            hist_counts = hist_activations[0]
+            hist_freqs = hist_counts / np.sum(hist_counts)
+            run_entropy_l2.append(-np.sum(hist_freqs * np.log(hist_freqs, out=np.zeros_like(hist_freqs), where=(hist_freqs!=0))))
+
+            hist_activations = np.histogram(first_weighted_act.detach().numpy().squeeze(), bins=7)
+            hist_counts = hist_activations[0]
+            hist_freqs = hist_counts / np.sum(hist_counts)
+            run_entropy_l1_with_grad.append(-np.sum(hist_freqs * np.log(hist_freqs, out=np.zeros_like(hist_freqs), where=(hist_freqs!=0))))
+
+            hist_activations = np.histogram(second_weighted_act.detach().numpy().squeeze(), bins=7)
+            hist_counts = hist_activations[0]
+            hist_freqs = hist_counts / np.sum(hist_counts)
+            run_entropy_l2_with_grad.append(-np.sum(hist_freqs * np.log(hist_freqs, out=np.zeros_like(hist_freqs), where=(hist_freqs!=0))))
+      
+        run_entropy.append(run_ent_val)
+        run_with_grad_entropy.append(run_with_grad_ent_val)
+
+    
+    for idx, step in enumerate(rew_step):
+        success = step != -1
+        # write data to csv file
+        if csv_file is not None:
+            csv_file.writerow([run_entropy[idx], run_with_grad_entropy[idx], \
+                run_entropy_l1[idx], run_entropy_l1_with_grad[idx], \
+                run_entropy_l2[idx], run_entropy_l2_with_grad[idx], \
+                step, success])
+
 
 def neuron_entropy_with_grad(args, run_activations, rew_step,\
      neuron_threshold, grad_threshold, weight_grad=0):
@@ -356,6 +431,26 @@ def main(args):
                                                         first_models, 
                                                         first_actions, 
                                                         first_activations)
+        # print("atv_with_grad: ", np.array(atv_with_grad[0]["all"]).shape)
+
+        # create csv file using csv writer
+        csv_file = open("{}_{}_{}.csv".format(args.act_fcn, args.run_type, args.method), "w", newline='')
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(["overall_entropy", "grad_entropy", "l1_entropy", "l1_grad_entropy", "l2_entropy", "l2_grad_entropy", "num_steps", "success"])
+
+
+        collect_data(atv_with_grad, rew_step, csv_writer)
+
+        csv_file.close()
+        # read everything in success row to list
+        success_list = []
+        for row in rew_step:
+            success_list.append(row != -1)
+        # get success %
+        success = sum(success_list)/len(success_list)
+        print("success rate: ", success)
+        return
+
         # run_entropy = get_neuron_entropy(first_actions, first_activations)
 
         # print("run_entropy shape: ", len(run_entropy))
