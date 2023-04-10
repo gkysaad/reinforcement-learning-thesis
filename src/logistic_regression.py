@@ -90,15 +90,15 @@ with open(TRAIN_FILE_NAME, 'r') as f:
     train_data = train_data[1:]
 
     # train on layer 1 and layer 2 as separate features with grads separated
-    train_x = [row[:1] for row in train_data]
+    train_x = [row[5:6] for row in train_data]
     # turn all data into floats
     train_x = [[float(x) for x in row] for row in train_x]
 
     # train_y = [int(row[-1] == 'True') for row in train_data]
     rew_steps = [int(row[-2]) if int(row[-2]) != -1 else 100000 for row in train_data]
-    limit = 10000
-    # train_y = [int(row) < 10000 for row in rew_steps]
-    train_y = rew_steps
+    limit = np.median(rew_steps)
+    train_y = [int(row) < limit for row in rew_steps]
+    # train_y = rew_steps
 
     # plot data
     # plt.scatter(train_x, rew_steps, c=train_y, cmap='bwr')
@@ -106,7 +106,7 @@ with open(TRAIN_FILE_NAME, 'r') as f:
 
     # train regression neural network
     # model = MLPRegressor(hidden_layer_sizes=(100, 100, 100), activation='relu', solver='adam', max_iter=1000)
-    model = LinearRegression()
+    model = LogisticRegression()
     model.fit(train_x, train_y)
 
     # test on test data
@@ -116,16 +116,16 @@ with open(TRAIN_FILE_NAME, 'r') as f:
         # remove header
         test_data = test_data[1:]
 
-        test_x = [row[:1] for row in test_data]
+        test_x = [row[5:6] for row in test_data]
         # turn all data into floats
         test_x = [[float(x) for x in row] for row in test_x]
 
         # test_y = [int(row[-1] == 'True') for row in test_data]
         # test_y = [int(row[-2]) for row in test_data]
         rew_steps = [int(row[-2]) if int(row[-2]) != -1 else 100000 for row in test_data]
-        limit = 10000
-        # test_y = [int(row) < 10000 for row in rew_steps]
-        test_y = rew_steps
+        # limit = 10000
+        test_y = [int(row) < limit for row in rew_steps]
+        # test_y = rew_steps
         print(test_y)
 
         # predict
@@ -133,14 +133,15 @@ with open(TRAIN_FILE_NAME, 'r') as f:
         # print(pred_y)
 
         # plot data
-        plt.scatter(test_x, test_y, c='b', label='actual')
-        plt.scatter(test_x, pred_y, c='r', label='predicted')
-        plt.legend()
-        plt.show()
+        # plt.scatter(test_x, test_y, c='b', label='actual')
+        # plt.scatter(test_x, pred_y, c='r', label='predicted')
+        # plt.legend()
+        # plt.show()
+
 
         # calculate accuracy
-        # print(accuracy_score(test_y, pred_y))
-        # print(confusion_matrix(test_y, pred_y))
-        print(np.mean(np.abs(pred_y - test_y)))
+        print(accuracy_score(test_y, pred_y))
+        print(confusion_matrix(test_y, pred_y))
+        # print(np.mean(np.abs(pred_y - test_y)))
 
 
