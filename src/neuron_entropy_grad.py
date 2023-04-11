@@ -180,7 +180,7 @@ def get_neuron_activation_with_grads(feats, model, actions, activations):
         for idx in range(act_activations.shape[1]):
             neuron_activation = act_activations[:, idx].detach().numpy()\
                 .squeeze()
-            print("policy: ", m.policy_net)
+            # print("policy: ", m.policy_net)
             if args.method == 'gradcam':
                 layer = LayerGradCam(m, m.policy_net[0] \
                     if idx < 64 else m.policy_net[2])
@@ -434,22 +434,22 @@ def main(args):
         # print("atv_with_grad: ", np.array(atv_with_grad[0]["all"]).shape)
 
         # create csv file using csv writer
-        csv_file = open("{}_{}_{}.csv".format(args.act_fcn, args.run_type, args.method), "w", newline='')
-        csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(["overall_entropy", "grad_entropy", "l1_entropy", "l1_grad_entropy", "l2_entropy", "l2_grad_entropy", "num_steps", "success"])
+        # csv_file = open("{}_{}_{}_{}.csv".format(args.act_fcn, args.env[-2:], args.run_type, args.method), "w", newline='')
+        # csv_writer = csv.writer(csv_file)
+        # csv_writer.writerow(["overall_entropy", "grad_entropy", "l1_entropy", "l1_grad_entropy", "l2_entropy", "l2_grad_entropy", "num_steps", "success"])
 
 
-        collect_data(atv_with_grad, rew_step, csv_writer)
+        # collect_data(atv_with_grad, rew_step, csv_writer)
 
-        csv_file.close()
-        # read everything in success row to list
-        success_list = []
-        for row in rew_step:
-            success_list.append(row != -1)
-        # get success %
-        success = sum(success_list)/len(success_list)
-        print("success rate: ", success)
-        return
+        # csv_file.close()
+        # # read everything in success row to list
+        # success_list = []
+        # for row in rew_step:
+        #     success_list.append(row != -1)
+        # # get success %
+        # success = sum(success_list)/len(success_list)
+        # print("success rate: ", success)
+        # return
 
         # run_entropy = get_neuron_entropy(first_actions, first_activations)
 
@@ -465,14 +465,14 @@ def main(args):
                 else:
                     thresholds = np.linspace(1, 2, args.threshold_steps)
         else:
-            thresholds = np.linspace(0.2, 1.4, args.threshold_steps)
-        thresholds = np.insert(thresholds, 0, 0)
+            thresholds = np.linspace(0, 1, args.threshold_steps)
+        # thresholds = np.insert(thresholds, 0, 0)
         # thresholds = np.around(np.linspace(0, 1, args.threshold_steps)\
         #     , decimals=1)
         # grad_thresholds = np.around(np.linspace(\
         #     0, 1, args.grad_threshold_steps), decimals=1)
         se_boosts = np.zeros((len(thresholds)))
-        for n_idx, n_threshold in enumerate(thresholds):
+        for n_idx, n_threshold in enumerate(tqdm(thresholds)):
             # for ng_idx, ng_threshold in enumerate(grad_thresholds):
             # se_boosts[ng_idx, n_idx] = neuron_entropy_with_grad(args, \
             #     atv_with_grad, run_entropy, rew_step, n_threshold, \

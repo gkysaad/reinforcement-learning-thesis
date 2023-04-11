@@ -13,7 +13,8 @@ test_rows = []
 
 # loop through all csv files in current directory
 for file in os.listdir(os.getcwd()):
-    if file.endswith(".csv") and file != 'experiment_summary.csv':
+    if file.endswith(".csv") and file != 'experiment_summary.csv' and "gradcam" not in file:
+        print("file: " + file)
         # open csv file
         with open(file, 'r') as f:
             # read first line

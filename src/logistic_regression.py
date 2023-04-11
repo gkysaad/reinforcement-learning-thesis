@@ -17,15 +17,18 @@ import matplotlib.pyplot as plt
 # TRAIN_FILE_NAME = "relu_train_gradcam.csv"
 # TEST_FILE_NAME = "relu_test_gradcam.csv"
 
-TRAIN_FILE_NAME = "tanh_train_gradcam.csv"
-TEST_FILE_NAME = "tanh_test_gradcam.csv"
+# TRAIN_FILE_NAME = "tanh_train_gradcam.csv"
+# TEST_FILE_NAME = "tanh_test_gradcam.csv"
+
+TRAIN_FILE_NAME = "tanh_v1_train_gradcam.csv"
+TEST_FILE_NAME = "tanh_v1_test_gradcam.csv"
 
 # read in data
 with open(TRAIN_FILE_NAME, 'r') as f:
     reader = csv.reader(f)
 
     # pandas
-    # df = pd.read_csv(f)
+    df = pd.read_csv(f)
     # plot every column agaisnt 2nd last
     # ax = df.plot(x=df.columns[-2], y=df.columns[0], style='o')
     # # df.plot(x=df.columns[-2], y=df.columns[1], style='o', ax=ax)
@@ -36,31 +39,32 @@ with open(TRAIN_FILE_NAME, 'r') as f:
     # ax.set_xlim(0, 20000)
     # plt.show()
 
-    # overall_entropy = df['overall_entropy'].to_numpy()
-    # grad_entropy = df['grad_entropy'].to_numpy()
-    # l1_entropy = df['l1_entropy'].to_numpy()
-    # l1_entropy_grad = df['l1_grad_entropy'].to_numpy()
-    # l2_entropy = df['l2_entropy'].to_numpy()
-    # l2_entropy_grad = df['l2_grad_entropy'].to_numpy()
-    # successes = df['success'].to_numpy()
+    overall_entropy = df['overall_entropy'].to_numpy()
+    grad_entropy = df['grad_entropy'].to_numpy()
+    l1_entropy = df['l1_entropy'].to_numpy()
+    l1_entropy_grad = df['l1_grad_entropy'].to_numpy()
+    l2_entropy = df['l2_entropy'].to_numpy()
+    l2_entropy_grad = df['l2_grad_entropy'].to_numpy()
+    successes = df['success'].to_numpy()
 
     # # print success rate
-    # print('success rate: ', np.mean(successes))
+    print('success rate: ', np.mean(successes))
 
-    # rew_steps = df['num_steps'].to_numpy()
-    # rew_steps = np.where(rew_steps == -1, 100000, rew_steps)
+    rew_steps = df['num_steps'].to_numpy()
+    rew_steps = np.where(rew_steps == -1, 100000, rew_steps)
 
-    # # create (entropy, reward steps) tuples
-    # overall_entropy_pairs = [(x, y) for x, y in zip(overall_entropy, rew_steps)]
+    # create (entropy, reward steps) tuples
+    overall_entropy_pairs = [(x, y) for x, y in zip(overall_entropy, rew_steps)]
 
-    # # bin the entropy values and get average reward steps for each bin
+    # bin the entropy values and get average reward steps for each bin
     # average_reward_steps = []
-    # entropy_bins = np.arange(0, 2, 0.05)
+    # entropy_bins = np.arange(0, 2, 0.1)
     # prev = 0
     # for i in entropy_bins:
     #     # get mean of reward steps only for entropy
-    #     avg_steps = np.mean(rew_steps[np.where((grad_entropy >= prev) & (grad_entropy < i))])
-    #     print(i, avg_steps)
+    #     steps = rew_steps[np.where((overall_entropy >= prev) & (overall_entropy < i))]
+    #     avg_steps = np.mean(steps)
+    #     print(i, avg_steps, len(steps))
     #     average_reward_steps.append(avg_steps)
     #     prev = i
     
@@ -69,6 +73,12 @@ with open(TRAIN_FILE_NAME, 'r') as f:
     # plt.xlabel('entropy')
     # plt.ylabel('average reward steps')
     # plt.show()
+
+    # plot scatter of entropy vs reward steps
+    plt.scatter(overall_entropy, rew_steps, cmap='bwr')
+    plt.xlabel('Entropy')
+    plt.ylabel('Reward Steps')
+    plt.show()
 
     # bin rew_steps and plot averahe entropy for each bin
     # average_entropy = []
