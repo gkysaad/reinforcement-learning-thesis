@@ -12,9 +12,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import csv
 from tqdm import tqdm
+import time
+import concurrent.futures
 
 from stable_baselines3_thesis.common.torch_layers import MlpExtractor
-from captum.attr import LayerGradCam, GuidedGradCam
+from captum.attr import LayerGradCam, GuidedGradCam, GuidedBackprop
 
 # =================
 # === ARGUMENTS ===
@@ -49,83 +51,149 @@ parser.add_argument('--run_type', default='train', help='train or test')
 parser.add_argument('--threshold', default=None, type=float)
 
 
+# def get_tensors_and_model(args):
+#     files_actvs = []
+#     files_feats = []
+#     files_model = []
+
+#     run_dirs = [os.path.join(args.dir, directory) for directory in \
+#         os.listdir(args.dir) if os.path.isdir(os.path.join(args.dir, directory))]
+#     run_dirs = [(path, int(path.split("_")[-1])) for path in run_dirs]
+#     run_dirs = sorted(run_dirs, key=lambda x: x[1])
+#     run_dirs = [dir for dir, _ in run_dirs]
+
+#     # Parse Directories
+#     for dir in run_dirs:
+#         paths = os.listdir(dir)
+
+#         ordered_paths_actvs = [os.path.splitext(path)[0] for path in paths\
+#              if path.endswith('.pt') and path.startswith('atv_and_act')]
+#         ordered_paths_actvs = [(path, int(path.split("_")[-1])) for path in\
+#              ordered_paths_actvs]
+#         ordered_paths_actvs = sorted(ordered_paths_actvs, key=lambda x: x[1])
+
+#         ordered_paths_feats = [os.path.splitext(path)[0] for path in paths\
+#              if path.endswith('.pt') and path.startswith('features')]
+#         ordered_paths_feats = [(path, int(path.split("_")[-1])) for path in\
+#              ordered_paths_feats]
+#         ordered_paths_feats = sorted(ordered_paths_feats, key=lambda x: x[1])
+
+#         ordered_paths_model = [os.path.splitext(path)[0] for path in paths\
+#              if path.endswith('.pt') and path.startswith('model')]
+#         ordered_paths_model = [(path, int(path.split("_")[-1])) for path\
+#              in ordered_paths_model]
+#         ordered_paths_model = sorted(ordered_paths_model, key=lambda x: x[1])
+
+#         files_actvs.append([os.path.join(dir, file+".pt")\
+#             for file, _ in ordered_paths_actvs])
+#         files_feats.append([os.path.join(dir, file+".pt")\
+#             for file, _ in ordered_paths_feats])
+#         files_model.append([os.path.join(dir, file+".pt")\
+#             for file, _ in ordered_paths_model])
+
+#         with open('model.json', 'w') as f:
+#             json.dump(files_model, f)
+
+#     # Load Activation Tensors and Stack
+#     atv_tensors = []
+#     act_tensors = []
+#     feats_tensors = []
+#     models = []
+
+#     for actvs_run, feats_run, model_run in zip(files_actvs, \
+#         files_feats, files_model):
+#         sub_atv_tensors = []
+#         sub_act_tensors = []
+#         sub_feats_tensors = []
+#         sub_models = []
+#         for actvs_path, feats_path, model_path in \
+#             zip(actvs_run, feats_run, model_run):
+#             atv_act_tensor = torch.load(actvs_path).cpu()
+#             sub_atv_tensors.append(atv_act_tensor[:, :128])
+#             sub_act_tensors.append(atv_act_tensor[:, 128:])
+#             sub_feats_tensors.append(torch.load(feats_path).cpu())
+#             if args.act_fcn == "tanh":
+#                 model = MlpExtractor(feature_dim=4, \
+#                     net_arch=[dict(pi=[64,64], vf=[64,64])], activation_fn=nn.Tanh).cpu()
+#             elif args.act_fcn == "relu":
+#                 model = MlpExtractor(feature_dim=4, \
+#                     net_arch=[dict(pi=[64,64], vf=[64,64])], activation_fn=nn.ReLU).cpu()
+#             # print(model)
+#             model.load_state_dict(torch.load(model_path))
+#             model.gradcam_forward = True
+#             sub_models.append(model)
+
+#         act_tensors.append(torch.vstack(sub_act_tensors))
+#         atv_tensors.append(torch.vstack(sub_atv_tensors))
+#         feats_tensors.append(torch.vstack(sub_feats_tensors))
+#         models.append(sub_models)
+    
+#     return models, atv_tensors, act_tensors, feats_tensors
+
+
 def get_tensors_and_model(args):
-    files_actvs = []
-    files_feats = []
-    files_model = []
+    def get_ordered_paths(paths, prefix):
+        ordered_paths = [os.path.splitext(path)[0] for path in paths if path.endswith('.pt') and path.startswith(prefix)]
+        ordered_paths = [(path, int(path.split("_")[-1])) for path in ordered_paths]
+        ordered_paths = sorted(ordered_paths, key=lambda x: x[1])
+        return ordered_paths
 
-    run_dirs = [os.path.join(args.dir, directory) for directory in \
-        os.listdir(args.dir) if os.path.isdir(os.path.join(args.dir, directory))]
-    run_dirs = [(path, int(path.split("_")[-1])) for path in run_dirs]
-    run_dirs = sorted(run_dirs, key=lambda x: x[1])
-    run_dirs = [dir for dir, _ in run_dirs]
-
-    # Parse Directories
-    for dir in run_dirs:
-        paths = os.listdir(dir)
-
-        ordered_paths_actvs = [os.path.splitext(path)[0] for path in paths\
-             if path.endswith('.pt') and path.startswith('atv_and_act')]
-        ordered_paths_actvs = [(path, int(path.split("_")[-1])) for path in\
-             ordered_paths_actvs]
-        ordered_paths_actvs = sorted(ordered_paths_actvs, key=lambda x: x[1])
-
-        ordered_paths_feats = [os.path.splitext(path)[0] for path in paths\
-             if path.endswith('.pt') and path.startswith('features')]
-        ordered_paths_feats = [(path, int(path.split("_")[-1])) for path in\
-             ordered_paths_feats]
-        ordered_paths_feats = sorted(ordered_paths_feats, key=lambda x: x[1])
-
-        ordered_paths_model = [os.path.splitext(path)[0] for path in paths\
-             if path.endswith('.pt') and path.startswith('model')]
-        ordered_paths_model = [(path, int(path.split("_")[-1])) for path\
-             in ordered_paths_model]
-        ordered_paths_model = sorted(ordered_paths_model, key=lambda x: x[1])
-
-        files_actvs.append([os.path.join(dir, file+".pt")\
-            for file, _ in ordered_paths_actvs])
-        files_feats.append([os.path.join(dir, file+".pt")\
-            for file, _ in ordered_paths_feats])
-        files_model.append([os.path.join(dir, file+".pt")\
-            for file, _ in ordered_paths_model])
-
-        with open('model.json', 'w') as f:
-            json.dump(files_model, f)
-
-    # Load Activation Tensors and Stack
-    atv_tensors = []
-    act_tensors = []
-    feats_tensors = []
-    models = []
-
-    for actvs_run, feats_run, model_run in zip(files_actvs, \
-        files_feats, files_model):
+    def process_run(actvs_run, feats_run, model_run):
         sub_atv_tensors = []
         sub_act_tensors = []
         sub_feats_tensors = []
         sub_models = []
-        for actvs_path, feats_path, model_path in \
-            zip(actvs_run, feats_run, model_run):
+        for actvs_path, feats_path, model_path in zip(actvs_run, feats_run, model_run):
             atv_act_tensor = torch.load(actvs_path).cpu()
             sub_atv_tensors.append(atv_act_tensor[:, :128])
             sub_act_tensors.append(atv_act_tensor[:, 128:])
             sub_feats_tensors.append(torch.load(feats_path).cpu())
             if args.act_fcn == "tanh":
-                model = MlpExtractor(feature_dim=4, \
-                    net_arch=[dict(pi=[64,64], vf=[64,64])], activation_fn=nn.Tanh).cpu()
+                model = MlpExtractor(feature_dim=4, net_arch=[dict(pi=[64, 64], vf=[64, 64])], activation_fn=nn.Tanh).cpu()
             elif args.act_fcn == "relu":
-                model = MlpExtractor(feature_dim=4, \
-                    net_arch=[dict(pi=[64,64], vf=[64,64])], activation_fn=nn.ReLU).cpu()
-            # print(model)
+                model = MlpExtractor(feature_dim=4, net_arch=[dict(pi=[64, 64], vf=[64, 64])], activation_fn=nn.ReLU).cpu()
             model.load_state_dict(torch.load(model_path))
             model.gradcam_forward = True
             sub_models.append(model)
 
-        act_tensors.append(torch.vstack(sub_act_tensors))
-        atv_tensors.append(torch.vstack(sub_atv_tensors))
-        feats_tensors.append(torch.vstack(sub_feats_tensors))
+        return sub_models, torch.vstack(sub_atv_tensors), torch.vstack(sub_act_tensors), torch.vstack(sub_feats_tensors)
+
+    files_actvs = []
+    files_feats = []
+    files_model = []
+
+    run_dirs = sorted([os.path.join(args.dir, directory) for directory in os.listdir(args.dir) if os.path.isdir(os.path.join(args.dir, directory))],
+                      key=lambda x: int(x.split("_")[-1]))
+
+    for dir in run_dirs:
+        paths = os.listdir(dir)
+
+        ordered_paths_actvs = get_ordered_paths(paths, 'atv_and_act')
+        ordered_paths_feats = get_ordered_paths(paths, 'features')
+        ordered_paths_model = get_ordered_paths(paths, 'model')
+
+        files_actvs.append([os.path.join(dir, file + ".pt") for file, _ in ordered_paths_actvs])
+        files_feats.append([os.path.join(dir, file + ".pt") for file, _ in ordered_paths_feats])
+        files_model.append([os.path.join(dir, file + ".pt") for file, _ in ordered_paths_model])
+
+    with open('model.json', 'w') as f:
+        json.dump(files_model, f)
+
+    atv_tensors = []
+    act_tensors = []
+    feats_tensors = []
+    models = []
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        results = list(executor.map(process_run, files_actvs, files_feats, files_model))
+
+    for result in results:
+        sub_models, sub_atv_tensors, sub_act_tensors, sub_feats_tensors = result
         models.append(sub_models)
-    
+        atv_tensors.append(sub_atv_tensors)
+        act_tensors.append(sub_act_tensors)
+        feats_tensors.append(sub_feats_tensors)
+
     return models, atv_tensors, act_tensors, feats_tensors
 
 def get_out_file_name(dir, out_xlsx):
@@ -184,16 +252,25 @@ def get_neuron_activation_with_grads(feats, model, actions, activations):
             if args.method == 'gradcam':
                 layer = LayerGradCam(m, m.policy_net[0] \
                     if idx < 64 else m.policy_net[2])
+                grad = layer.attribute(f, target=idx%64).squeeze() \
+                    .detach().numpy()
             elif args.method == 'gbp':
                 if idx < 64:
-                    layer = GuidedGradCam(m, m.policy_net[0])
+                    int_layer = m.policy_net[0]
                 else:
-                    layer = LayerGradCam(m, m.policy_net[2])
-                # layer = GuidedGradCam(m, m.policy_net[0] \
-                #     if idx < 64 else m.policy_net[2])
-            
-            grad = layer.attribute(f, target=idx%64).squeeze()\
-                .detach().numpy()
+                    int_layer = m.policy_net[2]
+                layer_gradcam = LayerGradCam(m, int_layer)
+                layer_gbp = GuidedBackprop(m)
+                grad_cam = layer_gradcam.attribute(f, target=idx%64).squeeze() \
+                    .detach().numpy()
+                guided_grads = layer_gbp.attribute(f, target=idx%64).squeeze() \
+                    .detach().numpy().mean(axis=1)
+                grad = guided_grads * grad_cam
+                                     
+           
+            # grad = layer.attribute(f).squeeze()\
+            #     .detach().numpy()
+            # print("grad: ", grad.shape)
             sub_run_atv_with_grad.append((neuron_activation, grad))
         # action_run_atv_with_grad[act] = sub_run_atv_with_grad
         action_run_atv_with_grad["all"] = sub_run_atv_with_grad
@@ -315,49 +392,22 @@ def neuron_entropy_with_grad(args, run_activations, rew_step,\
     # print("weight_grad: ", weight_grad)
     # Calculate Neuron Entropy
     run_with_grad_entropy = []
-    print("num runs: ", len(run_activations))
+    # print("num runs: ", len(run_activations))
     for run in run_activations:
         run_ent_val = 0
-        # print("run: ", run)
-        # print("run: ", run.items())
         for _, act_and_grad in run.items():
             activation = torch.tensor([i[0] for i in act_and_grad])
             gradients = torch.tensor([i[1] for i in act_and_grad])
-
-            # print("activation: ", activation.shape)
-            # print("gradients: ", gradients.shape)
-
             if weight_grad == 1:
-                # print("GRAD WEIGHTED ENTROPY")
                 activation = activation * gradients
-            # k = min(int(grad_threshold*128), 127) 
-            # grad_mags, topk_idxs = torch.topk(grad_mean, k) # just take neurons with largest grads
-            # if len(topk_idxs) != 0:
-                # for grad_mag, idx in zip(grad_mags, topk_idxs): # idx = neurons
-                #     if weight_grad == 0:
-            # print(activation[idx, :].detach().numpy().squeeze())
-            # print(activation.detach().numpy().squeeze().shape)
-            # hist_activations = np.histogram(activation[idx, :].detach().numpy().squeeze(), bins=7)
+          
             hist_activations = np.histogram(activation.detach().numpy().squeeze(), bins=7)
             hist_counts = hist_activations[0]
             hist_freqs = hist_counts / np.sum(hist_counts)
             run_ent_val = -np.sum(hist_freqs * np.log(hist_freqs, out=np.zeros_like(hist_freqs), where=(hist_freqs!=0)))
-                        # run_ent_val += entropy(hist_freqs) 
-                        # run_ent_val += entropy(norm.pdf(\
-                        #     activation[idx, :].detach().numpy().squeeze()))
-                        # threshold with median
-                        # standard deviation
-                        # put into buckets (7 bins) then compute entropy
-                    # elif weight_grad == 1:
-                    #     run_ent_val += grad_mag.item()*entropy(\
-                    #         norm.pdf(activation[idx, :].detach().numpy()\
-                    #             .squeeze()))
+               
         run_with_grad_entropy.append(run_ent_val)
-    
-    # Calculate the sample efficiency boost for some threshold percent
-    # threshold_idx = int(neuron_threshold*len(run_entropy)) if \
-    #     neuron_threshold != 1 else len(run_entropy)-1
-    # threshold_val = sorted(run_with_grad_entropy)[threshold_idx]
+
     threshold_val = neuron_threshold
     total_iters = 0
     total_success = 0
@@ -374,34 +424,52 @@ def neuron_entropy_with_grad(args, run_activations, rew_step,\
         else:
             total_iters += args.n_eval # not sure what n_eval is
     sample_efficiency = total_success / total_iters
-    print("Sample Efficiency: ", sample_efficiency)
+    # print("Sample Efficiency: ", sample_efficiency)
     return sample_efficiency
 
 def main(args):
+    def process_directory(args, i, base, base_dir, start_ind):
+        i += start_ind
+        args.dir = base_dir + str(i * 100)
+        str_size = len(str(i * 100))
+        args.xlsx_name = base + str(i * 100) + ".xlsx"
+        print("args.xlsx_name: ", args.xlsx_name)
+
+        start = time.time()
+        models2, activations2, actions2, feats2 = get_tensors_and_model(args)
+        end = time.time()
+        print("Time to load tensors and models: ", end - start, " seconds. (", (end - start) / 60, " minutes)")
+
+        start = time.time()
+        xlsx_name = get_out_file_name(args.dir, args.xlsx_name)
+        rew_step2 = load_sheets(args, args.dir, xlsx_name)
+        end = time.time()
+        print("Time to load sheets: ", end - start, " seconds. (", (end - start) / 60, " minutes)")
+
+        return models2, activations2, actions2, feats2, rew_step2
+
     models, activations, actions, feats = get_tensors_and_model(args)
     xlsx_name = get_out_file_name(args.dir, args.xlsx_name)
-
-    # gets the # of steps at which the reward threshold is reached for each run
     rew_step = load_sheets(args, args.dir, xlsx_name)
 
     print("models: ", len(models), " activations: ", len(activations), " actions: ", len(actions), " feats: ", len(feats), " rew_step: ", len(rew_step))
 
+    base = args.xlsx_name[:-8]
+    base_dir = args.dir[:-3]
     start_ind = int(args.dir[-3])
-    for i in range(1,5):
-        i += start_ind
-        args.dir = args.dir[:-3] + str(i*100)
-        args.xlsx_name = args.xlsx_name[:-8] + str(i*100) + ".xlsx"
-        print("args.xlsx_name: ", args.xlsx_name)
-        models2, activations2, actions2, feats2 = get_tensors_and_model(args)
+    count = 4
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        results = list(executor.map(process_directory, [args] * count, range(1, count+1), [base] * count, [base_dir] * count, [start_ind] * count))
+
+    for result in results:
+        models2, activations2, actions2, feats2, rew_step2 = result
 
         models = models + models2
         activations = activations + activations2
         actions = actions + actions2
         feats = feats + feats2
-
-        xlsx_name = get_out_file_name(args.dir, args.xlsx_name)
-        rew_step2 = load_sheets(args, args.dir, xlsx_name)
-        rew_step = rew_step + rew_step2 
+        rew_step = rew_step + rew_step2
 
     print("models: ", len(models), " activations: ", len(activations), " actions: ", len(actions), " feats: ", len(feats), " rew_step: ", len(rew_step))
 
@@ -434,27 +502,27 @@ def main(args):
         # print("atv_with_grad: ", np.array(atv_with_grad[0]["all"]).shape)
 
         # create csv file using csv writer
-        # csv_file = open("{}_{}_{}_{}.csv".format(args.act_fcn, args.env[-2:], args.run_type, args.method), "w", newline='')
-        # csv_writer = csv.writer(csv_file)
-        # csv_writer.writerow(["overall_entropy", "grad_entropy", "l1_entropy", "l1_grad_entropy", "l2_entropy", "l2_grad_entropy", "num_steps", "success"])
+        csv_file = open("{}_{}_{}_{}.csv".format(args.act_fcn, args.env[-2:], args.run_type, args.method), "w", newline='')
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(["overall_entropy", "grad_entropy", "l1_entropy", "l1_grad_entropy", "l2_entropy", "l2_grad_entropy", "num_steps", "success"])
 
 
-        # collect_data(atv_with_grad, rew_step, csv_writer)
+        collect_data(atv_with_grad, rew_step, csv_writer)
 
-        # csv_file.close()
-        # # read everything in success row to list
-        # success_list = []
-        # for row in rew_step:
-        #     success_list.append(row != -1)
-        # # get success %
-        # success = sum(success_list)/len(success_list)
-        # print("success rate: ", success)
-        # return
+        csv_file.close()
+        # read everything in success row to list
+        success_list = []
+        for row in rew_step:
+            success_list.append(row != -1)
+        # get success %
+        success = sum(success_list)/len(success_list)
+        print("success rate: ", success)
+        return
 
-        # run_entropy = get_neuron_entropy(first_actions, first_activations)
+        run_entropy = get_neuron_entropy(first_actions, first_activations)
 
-        # print("run_entropy shape: ", len(run_entropy))
-        # print("run_entropy: ", run_entropy)
+        print("run_entropy shape: ", len(run_entropy))
+        print("run_entropy: ", run_entropy)
         if args.weight_grad == 0:
             if args.act_fcn == "relu":
                 thresholds = np.linspace(0.4, 1.3, args.threshold_steps)
@@ -463,10 +531,11 @@ def main(args):
                 if args.env == "CartPole-v1":
                     thresholds = np.linspace(0.6, 1.6, args.threshold_steps)
                 else:
-                    thresholds = np.linspace(1, 2, args.threshold_steps)
+                    thresholds = np.linspace(0.5, 1.6, args.threshold_steps)
         else:
-            thresholds = np.linspace(0, 1, args.threshold_steps)
-        # thresholds = np.insert(thresholds, 0, 0)
+            thresholds = np.linspace(0, 1.5, args.threshold_steps)
+            thresholds = np.delete(thresholds, 0)
+        thresholds = np.insert(thresholds, 0, 0)
         # thresholds = np.around(np.linspace(0, 1, args.threshold_steps)\
         #     , decimals=1)
         # grad_thresholds = np.around(np.linspace(\
